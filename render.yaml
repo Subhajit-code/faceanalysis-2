@@ -3,7 +3,7 @@ services:
     name: sentinel-face-engine
     runtime: docker
     rootDir: face-engine
-    plan: starter
+    plan: free
     envVars:
       - key: INTERNAL_TOKEN
         sync: false # set manually in Render dashboard — share this exact value with the API service below
@@ -12,14 +12,10 @@ services:
     name: sentinel-api
     runtime: docker
     rootDir: server
-    plan: starter
-    disk:
-      name: sentinel-data
-      mountPath: /app/data
-      sizeGB: 1
+    plan: free
     envVars:
       - key: DATABASE_URL
-        value: file:/app/data/dev.db
+        sync: false # Postgres connection string from Neon or Supabase's free tier — NOT a local file
       - key: PORT
         value: 4000
       - key: JWT_SECRET

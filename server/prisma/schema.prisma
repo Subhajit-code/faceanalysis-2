@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -56,8 +56,8 @@ model AttendanceRecord {
   @@index([employeeId, date])
 }
 
-// SQLite has no native enum support in Prisma, so audit event types are a
-// plain String; validate against this allowed set at the application layer:
+// Kept as a plain String (not a Postgres enum) for flexibility; validate
+// against this allowed set at the application layer:
 // ACCESS_GRANTED | ACCESS_DENIED | ENROLLMENT_SUCCESS | ENROLLMENT_BLOCKED_DUPLICATE
 // SECURITY_ALERT | SCANNER_LOCKOUT | SESSION_TIMEOUT | ADMIN_ACTION
 model AuditLog {

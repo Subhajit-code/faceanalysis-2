@@ -10,15 +10,12 @@ services:
     env_file: ./server/.env
     environment:
       FACE_ENGINE_URL: http://face-engine:8000
-      DATABASE_URL: file:/app/data/dev.db
-    volumes:
-      - sqlite-data:/app/data
+      # DATABASE_URL (a Postgres connection string, e.g. from Neon/Supabase)
+      # comes from server/.env — this project no longer uses a local SQLite
+      # file or a Docker volume, so no local Postgres container is needed here.
     ports:
       - "4000:4000"
     depends_on:
       face-engine:
         condition: service_started
     restart: unless-stopped
-
-volumes:
-  sqlite-data:

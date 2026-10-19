@@ -1,6 +1,6 @@
 # Sentinel Biometrics — Production Backend Setup
 
-Two services: `face-engine` (Python/InsightFace) and `server` (Node/Express/Prisma/SQLite), plus the `/` frontend which talks to the API. SQLite is a single file (`server/data/dev.db` locally, or a Docker volume in compose) — no separate database server to run, patch, or secure.
+Two services: `face-engine` (Python/InsightFace) and `server` (Node/Express/Prisma/PostgreSQL), plus the `/` frontend which talks to the API. The project went through a SQLite phase during local development, but moved to PostgreSQL (e.g. Neon or Supabase's free tier) once real hosting entered the picture — Render's free web services have no persistent disk, so a local SQLite file gets wiped every time the service spins down from idle and wakes back up. A real Postgres instance elsewhere survives that.
 
 ## 1. Configure secrets
 
@@ -27,7 +27,7 @@ Paste both into `server/.env`. Never commit `.env`.
 docker compose up -d --build
 ```
 
-This brings up the face-engine (downloads InsightFace's `buffalo_l` model on first run — needs internet access once) and the API on `:4000`. The API container runs its SQLite migration automatically on startup (`npm start` = `prisma migrate deploy && node src/index.js`) and stores `dev.db` in a named Docker volume so it survives container restarts/rebuilds.
+This brings up the face-engine (downloads InsightFace's `buffalo_l` model on first run — needs internet access once) and the API on `:4000`. The API container runs its Postgres migration automatically on startup (`npm start` = `prisma migrate deploy && node src/index.js`). `DATABASE_URL` in `server/.env` must point at a real Postgres instance (Neon/Supabase free tier, or your own) — there's no local database container in this compose file.
 
 ## 3. Run migrations + create the first admin
 
@@ -62,7 +62,7 @@ I did not wire this up yet since it's a meaningful frontend rewrite — say the 
 | Concern | Before | Now |
 |---|---|---|
 | Face embeddings | dlib-ResNet, 128-D, computed & matched in-browser | ArcFace (InsightFace `buffalo_l`), 512-D, computed & matched server-side |
-| Data storage | `localStorage`, per-browser, plaintext | SQLite (via Prisma), embeddings AES-256-GCM encrypted at rest |
+| Data storage | `localStorage`, per-browser, plaintext | PostgreSQL (via Prisma), embeddings AES-256-GCM encrypted at rest |
 | Matching/threshold | Visible & alterable via browser devtools | Server-only, never exposed to the client |
 | Liveness | Blink-only, client-reported (trivially bypassable) | Server-enforced passive liveness + optional active head-turn challenge sequence |
 | Brute-force protection | None (client-side counter only) | DB-backed lockout + IP rate limiting on both login and verify endpoints |
@@ -86,8 +86,8 @@ CORS is now locked to `ALLOWED_ORIGIN` (set it in `server/.env` to your real fro
 1. **Swap the passive-liveness heuristic** in `face-engine/main.py` for a trained anti-spoofing model (e.g. MiniFASNet / Silent-Face-Anti-Spoofing). The burst check above closes the "submit one photo" and "swap photos mid-attempt" holes, but a genuinely high-quality video replay of a real blinking, moving face could still pass today's heuristic. This is the one remaining item I can't fully close without you deciding on a model and (ideally) a short labeled dataset of your own real vs. spoof attempts to validate against.
 2. **TLS termination** (nginx/Caddy or your cloud load balancer) in front of the API — never serve this over plain HTTP in production.
 3. **Secrets management** — move `AES_KEY`/`JWT_SECRET`/`DATABASE_URL` into a real secrets manager (AWS Secrets Manager, Vault, etc.) rather than a `.env` file on the host.
-4. **Backups** — SQLite is one file; back it up like any file (copy `dev.db` off-box on a schedule, or snapshot the Docker volume). Losing it means losing every enrolled face and attendance record, and the AES key is still needed to read what's left even if you have a backup.
-5. **SQLite's scaling ceiling** — it handles one writer process fine, which covers a single-instance deployment (one office, one API container) comfortably. If you later need multiple API instances behind a load balancer writing concurrently (e.g. several office locations hitting the same backend), you'd want to migrate back to a client-server DB (Postgres) at that point — the Prisma schema makes that a `provider` change, not a rewrite.
+4. **Backups** — Neon/Supabase both offer point-in-time recovery or scheduled backups on their free/low tiers; confirm which one yours does and don't assume it's automatic. Losing the database means losing every enrolled face and attendance record, and the AES key is still needed to read what's left even if you have a backup.
+5. **Free-tier database limits** — Neon and Supabase's free tiers cap storage (typically 0.5-3GB) and may pause the database after extended inactivity (it wakes on the next query, with a short delay). Fine for this project's scale; worth checking the current limits on whichever provider you pick before relying on it for real attendance data.
 5. **GDPR/biometric-data compliance** — face embeddings are legally sensitive biometric data in most jurisdictions; you likely need employee consent records and a data-retention/deletion policy, not just encryption.
 
 ## What I need from YOU to go further
