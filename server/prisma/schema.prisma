@@ -1,0 +1,82 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Admin {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+}
+
+model Employee {
+  id            String       @id @default(uuid())
+  employeeCode  String       @unique // e.g. EMP-1042
+  name          String
+  email         String       @unique
+  department    String
+  role          String
+  clearance     String       @default("Level 1")
+  avatarUrl     String?
+  active        Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  embeddings    FaceEmbedding[]
+  attendance    AttendanceRecord[]
+  auditEvents   AuditLog[]
+}
+
+// Store multiple embeddings per employee (front/angle/smile) for robust matching
+model FaceEmbedding {
+  id          String   @id @default(uuid())
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId  String
+  vector      Bytes    // float32 embedding, encrypted at rest via app-level AES-256-GCM
+  modelName   String   @default("arcface-r100")
+  createdAt   DateTime @default(now())
+
+  @@index([employeeId])
+}
+
+model AttendanceRecord {
+  id          String    @id @default(uuid())
+  employee    Employee  @relation(fields: [employeeId], references: [id])
+  employeeId  String
+  date        String    // YYYY-MM-DD
+  timeIn      DateTime
+  timeOut     DateTime?
+  confidence  Float
+  status      String    @default("On Time")
+
+  @@index([employeeId, date])
+}
+
+// SQLite has no native enum support in Prisma, so audit event types are a
+// plain String; validate against this allowed set at the application layer:
+// ACCESS_GRANTED | ACCESS_DENIED | ENROLLMENT_SUCCESS | ENROLLMENT_BLOCKED_DUPLICATE
+// SECURITY_ALERT | SCANNER_LOCKOUT | SESSION_TIMEOUT | ADMIN_ACTION
+model AuditLog {
+  id          String    @id @default(uuid())
+  type        String
+  employee    Employee? @relation(fields: [employeeId], references: [id])
+  employeeId  String?
+  confidence  Float?
+  notes       String
+  ipAddress   String?
+  createdAt   DateTime  @default(now())
+
+  @@index([createdAt])
+}
+
+model FailedAttempt {
+  id         String   @id @default(uuid())
+  ipAddress  String
+  createdAt  DateTime @default(now())
+
+  @@index([ipAddress, createdAt])
+}

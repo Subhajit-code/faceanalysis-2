@@ -1,0 +1,24 @@
+services:
+  face-engine:
+    build: ./face-engine
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  api:
+    build: ./server
+    env_file: ./server/.env
+    environment:
+      FACE_ENGINE_URL: http://face-engine:8000
+      DATABASE_URL: file:/app/data/dev.db
+    volumes:
+      - sqlite-data:/app/data
+    ports:
+      - "4000:4000"
+    depends_on:
+      face-engine:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  sqlite-data:

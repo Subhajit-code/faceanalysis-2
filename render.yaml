@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: sentinel-face-engine
+    runtime: docker
+    rootDir: face-engine
+    plan: starter
+    envVars:
+      - key: INTERNAL_TOKEN
+        sync: false # set manually in Render dashboard — share this exact value with the API service below
+
+  - type: web
+    name: sentinel-api
+    runtime: docker
+    rootDir: server
+    plan: starter
+    disk:
+      name: sentinel-data
+      mountPath: /app/data
+      sizeGB: 1
+    envVars:
+      - key: DATABASE_URL
+        value: file:/app/data/dev.db
+      - key: PORT
+        value: 4000
+      - key: JWT_SECRET
+        generateValue: true
+      - key: AES_KEY
+        sync: false # must be exactly 64 hex chars (32 bytes) — generate with the command in PRODUCTION_SETUP.md, set manually
+      - key: FACE_ENGINE_URL
+        sync: false # set to the sentinel-face-engine service's URL after it's deployed, e.g. https://sentinel-face-engine.onrender.com
+      - key: FACE_ENGINE_INTERNAL_TOKEN
+        sync: false # must match INTERNAL_TOKEN set on sentinel-face-engine above
+      - key: MATCH_THRESHOLD
+        value: "0.45"
+      - key: LIVENESS_MIN_SCORE
+        value: "0.2"
+      - key: ALLOWED_ORIGIN
+        sync: false # set to your Netlify URL once you have it, e.g. https://your-site.netlify.app
