@@ -13,7 +13,7 @@ FROM python:3.11-slim
 
 # --- Node.js runtime, alongside the base Python image ---
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl ca-certificates gnupg libgl1 libglib2.0-0 \
+    build-essential curl ca-certificates gnupg libgl1 libglib2.0-0 \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
