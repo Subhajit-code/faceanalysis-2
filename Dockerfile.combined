@@ -1,0 +1,44 @@
+# Combined single-service image: runs the Python face-engine and the Node
+# API in one container. The face-engine listens on 127.0.0.1 only — it is
+# never reachable from outside this container, so no internal-token auth is
+# needed between them (unlike the two-separate-services deployment, where
+# the face-engine gets its own public Render URL and must be locked down).
+#
+# Trade-off vs. two services: simpler to deploy (one Render service, one
+# cold-start instead of two), but the two processes can no longer be scaled,
+# restarted, or resource-limited independently — a crash or deploy of either
+# code path restarts both.
+
+FROM python:3.11-slim
+
+# --- Node.js runtime, alongside the base Python image ---
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl ca-certificates gnupg libgl1 libglib2.0-0 \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# --- Python face-engine dependencies ---
+COPY face-engine/requirements.txt ./face-engine/requirements.txt
+RUN pip install --no-cache-dir -r face-engine/requirements.txt
+COPY face-engine/main.py ./face-engine/main.py
+
+# --- Node API dependencies ---
+COPY server/package.json ./server/package.json
+RUN cd server && npm install --omit=dev
+COPY server/prisma ./server/prisma
+RUN cd server && npx prisma generate
+COPY server/src ./server/src
+
+# Face-engine binds to localhost only: never exposed outside the container
+ENV FACE_ENGINE_URL=http://127.0.0.1:8000
+# No internal token needed — loopback traffic isn't reachable from the internet
+ENV FACE_ENGINE_INTERNAL_TOKEN=""
+
+COPY start-combined.sh ./start-combined.sh
+RUN chmod +x ./start-combined.sh
+
+EXPOSE 4000
+CMD ["./start-combined.sh"]

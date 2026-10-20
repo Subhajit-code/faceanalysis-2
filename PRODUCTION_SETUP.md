@@ -90,6 +90,21 @@ CORS is now locked to `ALLOWED_ORIGIN` (set it in `server/.env` to your real fro
 5. **Free-tier database limits** — Neon and Supabase's free tiers cap storage (typically 0.5-3GB) and may pause the database after extended inactivity (it wakes on the next query, with a short delay). Fine for this project's scale; worth checking the current limits on whichever provider you pick before relying on it for real attendance data.
 5. **GDPR/biometric-data compliance** — face embeddings are legally sensitive biometric data in most jurisdictions; you likely need employee consent records and a data-retention/deletion policy, not just encryption.
 
+## Deploying as one combined service instead of two
+
+The default setup above deploys `face-engine` and `server` as two separate Render services. That's the normal microservice pattern, but it means two independent cold-starts on Render's free tier — if the face-engine happens to be asleep when someone logs in, that request chain is slower and more failure-prone than necessary.
+
+`Dockerfile.combined` (repo root) bundles both into a single container: the Python face-engine runs on `127.0.0.1:8000`, reachable only from inside the container (never exposed to the internet, so no internal-token auth is needed between them), and the Node API runs in front of it on the public port. `start-combined.sh` starts the face-engine first, waits for it to report healthy, then starts the API — and if either process dies afterward, it brings the whole container down so Render's health check restarts both cleanly rather than leaving a half-working instance running.
+
+To deploy this way on Render instead of two services:
+1. **New Web Service** → connect your repo → **Root Directory**: leave blank (repo root) → **Dockerfile Path**: `Dockerfile.combined`
+2. Env vars: just `DATABASE_URL`, `JWT_SECRET`, `AES_KEY`, `MATCH_THRESHOLD`, `LIVENESS_MIN_SCORE`, `ALLOWED_ORIGIN`, `PORT=4000` — you do **not** need `FACE_ENGINE_URL` or `FACE_ENGINE_INTERNAL_TOKEN` (the Dockerfile hardcodes the loopback URL and leaves the token empty since it's never exposed).
+3. One URL, one free-tier cold-start, one service to monitor.
+
+Trade-off: the two processes can no longer be scaled, restarted, or resource-limited independently, and a crash or redeploy of either code path restarts both. For a small single-office deployment that's a fine trade; for anything bigger, two services is the more standard, more operationally flexible choice.
+
+**I could not test this Dockerfile's actual build** — Docker isn't available in this environment, so I verified the shell script's syntax and the Dockerfile follows standard patterns, but haven't watched it build end-to-end. Watch Render's build log on the first deploy in case something needs a small fix (e.g. an apt package name, a path).
+
 ## What I need from YOU to go further
 
 I've pushed everything I can decide on my own as far as it reasonably goes. The items below need information or decisions only you have:
