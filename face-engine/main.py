@@ -36,8 +36,21 @@ def require_internal_token(x_internal_token: str | None = Header(default=None)):
     if INTERNAL_TOKEN and not (x_internal_token and hmac.compare_digest(x_internal_token, INTERNAL_TOKEN)):
         raise HTTPException(status_code=401, detail="Missing or invalid internal token")
 
-face_app = FaceAnalysis(name="buffalo_l", providers=["CPUExecutionProvider"])
-face_app.prepare(ctx_id=0, det_size=(640, 640))
+# Model pack + loaded modules are tuned to fit Render's free-tier 512MB RAM
+# limit, which buffalo_l (its full 5-model pack, including a ~166MB recognition
+# net) blew past on its own, before Node even started. buffalo_s swaps in a
+# much smaller MobileFaceNet-based recognition model — trading some accuracy
+# for footprint — and allowed_modules skips the landmark/genderage models we
+# never use. If accuracy suffers too much for your use case, the fix is a
+# paid instance with more RAM (lets you go back to buffalo_l), not further
+# memory tuning here.
+FACE_MODEL_PACK = os.environ.get("FACE_MODEL_PACK", "buffalo_s")
+face_app = FaceAnalysis(
+    name=FACE_MODEL_PACK,
+    providers=["CPUExecutionProvider"],
+    allowed_modules=["detection", "recognition"],
+)
+face_app.prepare(ctx_id=0, det_size=(320, 320))
 
 
 class ExtractRequest(BaseModel):
